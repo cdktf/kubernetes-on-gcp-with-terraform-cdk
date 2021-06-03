@@ -5,7 +5,7 @@ import { KubernetesProvider } from "./.gen/providers/kubernetes/kubernetes-provi
 import * as fs from "fs";
 import * as path from "path";
 import { Namespace } from "./.gen/providers/kubernetes/namespace";
-import { NAMESPACE, CLUSTER_NAME } from "./config";
+import { CLUSTER_NAME } from "./config";
 import { application } from "./services";
 import { TerraformGoogleModulesKubernetesEngineGoogleModulesAuth as GKEAuth } from "./.gen/modules/terraform-google-modules/kubernetes-engine/google/modules/auth";
 import { File } from "./.gen/providers/local/file";
@@ -160,7 +160,7 @@ class ApplicationLayer extends TerraformStack {
     const ns = new Namespace(this, "ns", {
       metadata: [
         {
-          name: NAMESPACE,
+          name,
         },
       ],
     });
@@ -175,5 +175,7 @@ class ApplicationLayer extends TerraformStack {
 const app = new App();
 new InfrastructureLayer(app, "infrastructure");
 new BaselineLayer(app, "baseline");
-new ApplicationLayer(app, "applications");
+new ApplicationLayer(app, "development");
+new ApplicationLayer(app, "staging");
+new ApplicationLayer(app, "production");
 app.synth();

@@ -4,7 +4,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { Deployment } from "./.gen/providers/kubernetes/deployment";
 import { Service } from "./.gen/providers/kubernetes/service";
-import { VERSION, DOCKER_ORG, NAMESPACE } from "./config";
+import { VERSION, DOCKER_ORG } from "./config";
 import { Resource } from "./.gen/providers/null/resource";
 import { Namespace } from "./.gen/providers/kubernetes/namespace";
 import {
@@ -12,7 +12,11 @@ import {
   ServiceAccountKey,
 } from "@cdktf/provider-google";
 
-function buildAndPushImage(scope: Construct, imageName: string, p: string): [string, Resource] {
+function buildAndPushImage(
+  scope: Construct,
+  imageName: string,
+  p: string
+): [string, Resource] {
   const _ = (name: string) => `${imageName}-${name}`;
   const files = fs.readdirSync(p);
 
@@ -42,6 +46,14 @@ function buildAndPushImage(scope: Construct, imageName: string, p: string): [str
     );
   }
 
+  function getVersion(): string {
+    if (files.includes("package.json")) {
+      return require(path.resolve(p, "package.json")).version;
+    }
+
+    return VERSION;
+  }
+
   const dockerfileFlag = getDockerfileFlag();
   const content = new TerraformAsset(scope, _("content"), {
     path: p,
@@ -55,9 +67,16 @@ function buildAndPushImage(scope: Construct, imageName: string, p: string): [str
     serviceAccountId: sa.email,
   });
 
-  const tag = `gcr.io/${DOCKER_ORG}/${imageName}:${VERSION}`;
+  const version = getVersion();
+  
 
-  const image = new Resource(scope, _("image"), {});
+  const tag = `gcr.io/${DOCKER_ORG}/${imageName}:${version}-${content.assetHash}`;
+  const image = new Resource(scope, _("image"), {
+    triggers: {
+      tag,
+    },
+  });
+  
 
   const cmd = `echo '${key.privateKey}' | base64 -D | docker login -u _json_key --password-stdin https://gcr.io && docker build ${dockerfileFlag} -t ${tag} ${content.path} && docker push ${tag}`;
   image.addOverride("provisioner.local-exec.command", cmd);
@@ -69,6 +88,7 @@ function service(
   scope: Construct,
   image: string,
   imageTag: string,
+  ns: Namespace,
   dependencies: ITerraformDependable[]
 ) {
   const labels = { application: image };
@@ -78,7 +98,7 @@ function service(
       {
         name: image,
         labels,
-        namespace: NAMESPACE,
+        namespace: ns.id,
       },
     ],
     spec: [
@@ -113,8 +133,8 @@ function service(
   });
 
   new Service(scope, `${image}-service`, {
-    dependsOn: [...dependencies,deployment],
-    metadata: [{ name: image, namespace: NAMESPACE }],
+    dependsOn: [...dependencies, deployment],
+    metadata: [{ name: image, namespace: ns.id }],
     spec: [
       {
         selector: { application: image },
@@ -127,5 +147,5 @@ function service(
 export function application(scope: Construct, p: string, ns: Namespace) {
   const name = path.basename(p);
   const [image, resource] = buildAndPushImage(scope, name, p);
-  service(scope, name, image, [ns, resource]);
+  service(scope, name, image, ns, [ns, resource]);
 }
