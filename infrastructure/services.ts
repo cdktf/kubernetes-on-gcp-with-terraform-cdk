@@ -1,60 +1,109 @@
+import { ITerraformDependable, TerraformAsset } from "cdktf";
 import { Construct } from "constructs";
 import * as fs from "fs";
 import * as path from "path";
-import { RegistryImage } from "./.gen/providers/docker/registry-image";
 import { Deployment } from "./.gen/providers/kubernetes/deployment";
 import { Service } from "./.gen/providers/kubernetes/service";
-import { VERSION, NAMESPACE } from './config';
+import { VERSION, DOCKER_ORG, NAMESPACE } from "./config";
+import { Resource } from "./.gen/providers/null/resource";
+import { Namespace } from "./.gen/providers/kubernetes/namespace";
+import {
+  DataGoogleServiceAccount,
+  ServiceAccountKey,
+} from "@cdktf/provider-google";
 
-
-
-function buildAndPushImage(scope: Construct, image: string, p: string) {
+function buildAndPushImage(scope: Construct, imageName: string, p: string): [string, Resource] {
+  const _ = (name: string) => `${imageName}-${name}`;
   const files = fs.readdirSync(p);
 
-  let dockerfile = `${p}/Dockerfile`;
+  function getDockerfileFlag() {
+    if (files.includes("Dockerfile")) {
+      return "";
+    }
 
-  if (files.includes("package.json")) {
-    dockerfile =  "Dockerfile.node";
+    if (files.includes("package.json")) {
+      const asset = new TerraformAsset(scope, _("node-dockerfile"), {
+        path: path.resolve(__dirname, "Dockerfile.node"),
+      });
+
+      return `-f ${asset.path}`;
+    }
+
+    if (files.includes("Cargo.toml")) {
+      const asset = new TerraformAsset(scope, _("node-dockerfile"), {
+        path: path.resolve(__dirname, "Dockerfile.rust"),
+      });
+
+      return `-f ${asset.path}`;
+    }
+
+    throw new Error(
+      "Unknown application language, please add a Dockerfile or use node or rust"
+    );
   }
 
-  if (files.includes("Cargo.toml")) {
-    dockerfile =  "Dockerfile.rust";
-  }
-
-  return new RegistryImage(scope, `${image}-image`, {
-    name: `${image}:${VERSION}`,
-    buildAttribute: [
-      {
-        context: p,
-        dockerfile,
-      },
-    ],
+  const dockerfileFlag = getDockerfileFlag();
+  const content = new TerraformAsset(scope, _("content"), {
+    path: p,
   });
+
+  const sa = new DataGoogleServiceAccount(scope, _("sa"), {
+    accountId: "registry-push",
+  });
+
+  const key = new ServiceAccountKey(scope, _("sa-key"), {
+    serviceAccountId: sa.email,
+  });
+
+  const tag = `gcr.io/${DOCKER_ORG}/${imageName}:${VERSION}`;
+
+  const image = new Resource(scope, _("image"), {});
+
+  const cmd = `echo '${key.privateKey}' | base64 -D | docker login -u _json_key --password-stdin https://gcr.io && docker build ${dockerfileFlag} -t ${tag} ${content.path} && docker push ${tag}`;
+  image.addOverride("provisioner.local-exec.command", cmd);
+
+  return [tag, image];
 }
 
-function service(scope: Construct, image: string, resource: RegistryImage) {
-  new Deployment(scope, `${image}-deployment`, {
+function service(
+  scope: Construct,
+  image: string,
+  imageTag: string,
+  dependencies: ITerraformDependable[]
+) {
+  const labels = { application: image };
+  const deployment = new Deployment(scope, `${image}-deployment`, {
+    dependsOn: dependencies,
     metadata: [
       {
         name: image,
-        labels: { name: image },
+        labels,
         namespace: NAMESPACE,
       },
     ],
     spec: [
       {
+        selector: [
+          {
+            matchLabels: labels,
+          },
+        ],
         template: [
           {
             metadata: [
               {
-                name: image,
-                labels: { name: image },
-                namespace: NAMESPACE,
+                labels,
               },
             ],
             spec: [
               {
-                container: [{ name: "application", image: resource.name }],
+                container: [
+                  {
+                    name: "application",
+                    image: imageTag,
+                    port: [{ containerPort: 80 }],
+                  },
+                ],
               },
             ],
           },
@@ -64,6 +113,7 @@ function service(scope: Construct, image: string, resource: RegistryImage) {
   });
 
   new Service(scope, `${image}-service`, {
+    dependsOn: [...dependencies,deployment],
     metadata: [{ name: image, namespace: NAMESPACE }],
     spec: [
       {
@@ -74,8 +124,8 @@ function service(scope: Construct, image: string, resource: RegistryImage) {
   });
 }
 
-export function application(scope: Construct, p: string) {
+export function application(scope: Construct, p: string, ns: Namespace) {
   const name = path.basename(p);
-  const imageResource = buildAndPushImage(scope, name, p);
-  service(scope, name, imageResource);
+  const [image, resource] = buildAndPushImage(scope, name, p);
+  service(scope, name, image, [ns, resource]);
 }
