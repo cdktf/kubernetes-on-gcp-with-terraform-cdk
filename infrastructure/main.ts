@@ -21,7 +21,6 @@ import {
   ServiceAccount,
 } from "@cdktf/provider-google";
 
-const KUBECONFIG_PATH = path.resolve(__dirname, "../kubeconfig.yaml");
 const oauthScopes = [
   "https://www.googleapis.com/auth/devstorage.read_only",
   "https://www.googleapis.com/auth/logging.write",
@@ -53,7 +52,7 @@ function useCluster(scope: Construct, name: string) {
 
   // For the application layer
   new File(scope, "kubeconfig", {
-    filename: KUBECONFIG_PATH,
+    filename: path.resolve(__dirname, "../kubeconfig.yaml"),
     content: auth.kubeconfigRawOutput,
   });
 
