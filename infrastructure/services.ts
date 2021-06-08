@@ -91,7 +91,7 @@ function service(
   ns: Namespace,
   dependencies: ITerraformDependable[]
 ) {
-  const labels = { application: image };
+  const labels = { application: image, deployedBy: "cdktf" };
   const deployment = new Deployment(scope, `${image}-deployment`, {
     dependsOn: dependencies,
     metadata: [
