@@ -99,6 +99,7 @@ class InfrastructureLayer extends TerraformStack {
       initialNodeCount: 1,
       nodeConfig: [
         {
+          preemptible: true,
           serviceAccount: sa.email,
           oauthScopes,
         },
@@ -109,7 +110,27 @@ class InfrastructureLayer extends TerraformStack {
       dependsOn: [cluster],
       name: "main",
       cluster: cluster.name,
-      nodeCount: 10,
+      nodeCount: 3,
+      nodeConfig: [
+        {
+          preemptible: true,
+          machineType: "e2-medium",
+          serviceAccount: sa.email,
+          oauthScopes,
+        },
+      ],
+    });
+
+    new ContainerNodePool(this, "workload-pool", {
+      dependsOn: [cluster],
+      name: "workload",
+      cluster: cluster.name,
+      autoscaling: [
+        {
+          minNodeCount: 1,
+          maxNodeCount: 10,
+        },
+      ],
       nodeConfig: [
         {
           preemptible: true,
