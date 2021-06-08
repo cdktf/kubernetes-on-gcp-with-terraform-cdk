@@ -50,7 +50,6 @@ function useCluster(scope: Construct, name: string) {
     projectId: cluster.project,
   });
 
-  // For the application layer
   new File(scope, "kubeconfig", {
     filename: path.resolve(__dirname, "../kubeconfig.yaml"),
     content: auth.kubeconfigRawOutput,
@@ -107,7 +106,6 @@ class InfrastructureLayer extends TerraformStack {
     });
 
     new ContainerNodePool(this, "main-pool", {
-      dependsOn: [cluster],
       name: "main",
       cluster: cluster.name,
       nodeCount: 3,
@@ -122,7 +120,6 @@ class InfrastructureLayer extends TerraformStack {
     });
 
     new ContainerNodePool(this, "workload-pool", {
-      dependsOn: [cluster],
       name: "workload",
       cluster: cluster.name,
       autoscaling: [
