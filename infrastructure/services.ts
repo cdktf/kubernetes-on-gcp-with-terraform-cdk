@@ -122,6 +122,12 @@ function service(
                     name: "application",
                     image: imageTag,
                     port: [{ containerPort: 80 }],
+                    livenessProbe: [{
+                      httpGet: [{
+                        path: "/health",
+                        port: "80",
+                      }]
+                    }]
                   },
                 ],
               },
