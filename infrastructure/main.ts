@@ -6,7 +6,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { Namespace } from "./.gen/providers/kubernetes/namespace";
 import { CLUSTER_NAME } from "./config";
-import { buildAndPushImage } from "./services";
+import { buildAndPushImage } from "./docker";
 import { TerraformGoogleModulesKubernetesEngineGoogleModulesAuth as GKEAuth } from "./.gen/modules/terraform-google-modules/kubernetes-engine/google/modules/auth";
 import { HelmProvider } from "./.gen/providers/helm/helm-provider";
 import { Release, ReleaseConfig } from "./.gen/providers/helm/release";
