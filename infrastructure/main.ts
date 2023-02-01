@@ -1,3 +1,8 @@
+/**
+ * Copyright (c) HashiCorp, Inc.
+ * SPDX-License-Identifier: MPL-2.0
+ */
+
 import { Construct } from "constructs";
 import { App, ITerraformDependable, TerraformStack } from "cdktf";
 import { DockerProvider } from "./.gen/providers/docker/docker-provider";
